@@ -26,10 +26,15 @@ export default function Dashboard({
     const planData = planDataMap[activeCompetitorId] || null;
     const competitorId = activeCompetitorId;
 
-    const signals = analysisData?.signals || [];
-    const featureComp = analysisData?.feature_comparison || {};
-    const pricingComp = analysisData?.pricing_comparison || {};
-    const marketInsights = analysisData?.market_insights || {};
+    // Use the new JSON schema structure
+    const threats = analysisData?.signals?.threats || [];
+    const opportunities = analysisData?.signals?.opportunities || [];
+    const allSignals = [...threats.map(t => ({ ...t, type: 'threat' })), ...opportunities.map(o => ({ ...o, type: 'opportunity' }))];
+
+    const featureGaps = analysisData?.feature_gap_analysis || {};
+    const pricingIntel = analysisData?.pricing_intelligence || {};
+    const sentiment = analysisData?.community_sentiment || {};
+    const radar = analysisData?.radar_scores || {};
     const roadmap = planData?.roadmap || [];
     const navigate = useNavigate();
 
@@ -80,25 +85,40 @@ export default function Dashboard({
         }
     };
 
-    // Battle Card data
+    // Battle Card data based on new schema
     const battleRows = useMemo(() => {
         const rows = [];
-        rows.push({ label: 'Value Proposition', you: companyData?.positioning?.value_proposition || '—', them: analysisData?.competitor_name ? 'Competitor positioning' : '—' });
-        rows.push({ label: 'Pricing Model', you: companyData?.pricing?.model || '—', them: pricingComp.their_pricing_summary || '—' });
-        rows.push({ label: 'Price Advantage', you: pricingComp.price_advantage === 'you' ? '✅ Advantage' : '—', them: pricingComp.price_advantage === 'them' ? '✅ Advantage' : '—' });
-        rows.push({ label: 'Market Position', you: companyData?.positioning?.market_position || '—', them: `Overlap: ${marketInsights.positioning_overlap || '?'}%` });
-        rows.push({ label: 'Target Overlap', you: `${marketInsights.target_audience_overlap || '?'}%`, them: `${marketInsights.target_audience_overlap || '?'}%` });
-        rows.push({ label: 'Unique Features', you: `${(featureComp.your_advantages || []).length} advantages`, them: `${(featureComp.their_advantages || []).length} advantages` });
+        rows.push({ label: 'Value Proposition', you: companyData?.positioning?.value_proposition || '—', them: '—' });
+        rows.push({ label: 'Pricing Model', you: companyData?.pricing?.model || '—', them: pricingIntel.model || '—' });
+        rows.push({ label: 'Price Perception', you: '—', them: pricingIntel.community_price_perception || '—' });
+        rows.push({ label: 'Key Features We Win', you: `${(featureGaps.we_win || []).length} features`, them: '—' });
+        rows.push({ label: 'Key Features They Win', you: '—', them: `${(featureGaps.they_win || []).length} features` });
+        rows.push({ label: 'Community Sentiment', you: '—', them: `${sentiment.overall_score || 0}/100 (${sentiment.sentiment_trend || 'Unknown'})` });
         return rows;
-    }, [companyData, analysisData, pricingComp, marketInsights, featureComp]);
+    }, [companyData, analysisData, pricingIntel, featureGaps, sentiment]);
 
-    // Radar chart data
+    // Radar chart data using REAL AI data
     const radarData = useMemo(() => {
-        const categories = ['Features', 'Pricing', 'Positioning', 'Enterprise', 'Integration', 'Content'];
-        const yourScores = categories.map(() => Math.floor(Math.random() * 30) + 60);
-        const theirScores = categories.map(() => Math.floor(Math.random() * 30) + 50);
-        if (featureComp.your_advantages?.length) yourScores[0] = Math.min(100, 50 + featureComp.your_advantages.length * 10);
-        if (featureComp.their_advantages?.length) theirScores[0] = Math.min(100, 50 + featureComp.their_advantages.length * 10);
+        const categories = ['Features', 'Pricing', 'Market Pos', 'Growth', 'Enterprise', 'Community'];
+
+        // Assume you are solid 8/10s across the board by default as a baseline if you want, 
+        // or parse from companyData if it existed.
+        const yourScores = [80, 80, 70, 80, 60, 70];
+
+        // AI returns radar scores natively now! Convert 0-10 or 0-100 format safely
+        const normalize = (val) => {
+            const v = Number(val) || 0;
+            return v <= 10 ? v * 10 : v;
+        };
+        const theirScores = [
+            normalize(radar.features),
+            normalize(radar.pricing),
+            normalize(radar.market_position),
+            normalize(radar.growth_trajectory),
+            normalize(radar.enterprise_readiness),
+            normalize(radar.community_strength)
+        ];
+
         return {
             labels: categories,
             datasets: [
@@ -106,7 +126,7 @@ export default function Dashboard({
                 { label: analysisData?.competitor_name || 'Competitor', data: theirScores, borderColor: 'rgba(255, 107, 107, 1)', backgroundColor: 'rgba(255, 107, 107, 0.15)', borderWidth: 2, pointBackgroundColor: 'rgba(255, 107, 107, 1)' },
             ],
         };
-    }, [companyData, analysisData, featureComp]);
+    }, [companyData, analysisData, radar]);
 
     const radarOptions = {
         responsive: true,
@@ -146,6 +166,8 @@ export default function Dashboard({
         );
     }
 
+    const criticalThreats = threats.filter(t => t.severity_score >= 80).length;
+
     return (
         <div className="animate-fade-in-up">
             <h1 className="page-title">Strategic Dashboard</h1>
@@ -172,20 +194,20 @@ export default function Dashboard({
             {/* Stats Row */}
             <div className="grid-4 stagger-children" style={{ marginBottom: 'var(--space-xl)' }}>
                 <div className="glass-card" style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-danger)' }}>{signals.filter(s => s.signal_type === 'threat').length}</div>
-                    <div className="label">Threats</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-danger)' }}>{threats.length}</div>
+                    <div className="label">Total Threats</div>
                 </div>
                 <div className="glass-card" style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-success)' }}>{signals.filter(s => s.signal_type === 'opportunity').length}</div>
-                    <div className="label">Opportunities</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-success)' }}>{opportunities.length}</div>
+                    <div className="label">Total Opportunities</div>
                 </div>
                 <div className="glass-card" style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ff4444' }}>{signals.filter(s => s.severity === 'existential').length}</div>
-                    <div className="label">Existential</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ff4444' }}>{criticalThreats}</div>
+                    <div className="label">Critical Threats</div>
                 </div>
                 <div className="glass-card" style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-primary)' }}>{marketInsights.competitive_intensity || '—'}</div>
-                    <div className="label">Intensity</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-primary)' }}>{sentiment.overall_score || 0}%</div>
+                    <div className="label">Sentiment Score</div>
                 </div>
             </div>
 
@@ -209,30 +231,84 @@ export default function Dashboard({
 
                 {/* Radar Chart */}
                 <div className="glass-card--static">
-                    <div className="section-title">🎯 Feature Gap Radar</div>
+                    <div className="section-title">🎯 AI Feature Radar</div>
                     <div className="radar-container">
                         <Radar data={radarData} options={radarOptions} />
                     </div>
                 </div>
             </div>
 
-            {/* Signal Severity Heatmap */}
+            {/* Inferred Roadmap (NEW based on jobs data) */}
+            {(analysisData.inferred_roadmap || []).length > 0 && (
+                <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
+                    <div className="section-title">🔮 Inferred Roadmap (via Job Postings & News)</div>
+                    <div className="grid-2">
+                        {analysisData.inferred_roadmap.map((item, i) => (
+                            <div key={i} className="glass-card">
+                                <h4 style={{ color: 'var(--accent-danger)', fontSize: '0.9rem', marginBottom: 'var(--space-xs)' }}>
+                                    Building: {item.inference}
+                                </h4>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>
+                                    {item.reasoning}
+                                </p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    <span>📍 {item.source_signal}</span>
+                                    <span>⏱ {item.timeline_estimate}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Pricing Intelligence */}
+            {pricingIntel.tiers_found?.length > 0 && (
+                <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
+                    <div className="section-title">💰 Pricing Intelligence ({pricingIntel.model})</div>
+                    <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+                        {pricingIntel.tiers_found.map((tier, i) => (
+                            <div key={i} className="glass-card" style={{ flex: '1 1 200px' }}>
+                                <div style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: 4 }}>{tier.name}</div>
+                                <div style={{ color: 'var(--accent-primary)', fontSize: '1.25rem', fontWeight: 800, marginBottom: 'var(--space-sm)' }}>{tier.price}</div>
+                                <ul style={{ paddingLeft: 'var(--space-md)', fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+                                    {(tier.key_limits || []).map((limit, j) => (
+                                        <li key={j}>{limit}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                    {pricingIntel.pricing_complaints?.length > 0 && (
+                        <div style={{ marginTop: 'var(--space-md)', background: 'rgba(255, 68, 68, 0.1)', padding: 'var(--space-sm)', borderRadius: 'var(--radius)', borderLeft: '4px solid var(--accent-danger)' }}>
+                            <strong style={{ fontSize: '0.85rem', color: 'var(--accent-danger)' }}>Community Complaints:</strong>
+                            <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 4, marginBottom: 0 }}>
+                                {pricingIntel.pricing_complaints.map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Signal Heatmap */}
             <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
                 <div className="section-title">🔥 Signal Severity Heatmap</div>
                 <div className="heatmap-grid">
-                    {signals.map((signal, i) => (
-                        <div className={`heatmap-cell heatmap-cell--${signal.severity}`} key={i} title={signal.description}>
-                            <div style={{ fontSize: '0.7rem', marginBottom: 4 }}>{signal.signal_type === 'threat' ? '⚠️' : '🟢'}</div>
-                            <div style={{ fontSize: '0.7rem', lineHeight: 1.3 }}>{signal.title?.substring(0, 40)}{signal.title?.length > 40 ? '...' : ''}</div>
-                        </div>
-                    ))}
+                    {allSignals.map((signal, i) => {
+                        const sevLevel = signal.type === 'threat' ? (signal.severity_score >= 80 ? 'existential' : 'moderate') : 'opportunity';
+                        return (
+                            <div className={`heatmap-cell heatmap-cell--${sevLevel}`} key={i} title={signal.description}>
+                                <div style={{ fontSize: '0.7rem', marginBottom: 4 }}>{signal.type === 'threat' ? '⚠️' : '🟢'}</div>
+                                <div style={{ fontSize: '0.7rem', lineHeight: 1.3 }}>{signal.title?.substring(0, 40)}{signal.title?.length > 40 ? '...' : ''}</div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
             {/* Roadmap Timeline */}
             {roadmap.length > 0 && (
                 <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
-                    <div className="section-title">📋 4-Week Roadmap</div>
+                    <div className="section-title">📋 Recommended 4-Week Action Plan</div>
                     <div className="timeline">
                         {roadmap.map((week, i) => (
                             <div className="timeline-week" key={i}>

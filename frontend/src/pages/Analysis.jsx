@@ -77,13 +77,10 @@ export default function Analysis({
         }
     };
 
-    const severityColor = (sev) => {
-        switch (sev) {
-            case 'existential': return '#ff4444';
-            case 'moderate': return 'var(--accent-warning)';
-            case 'minor': return 'var(--accent-secondary)';
-            default: return 'var(--text-muted)';
-        }
+    const getScoreColor = (score) => {
+        if (score >= 80) return 'var(--accent-danger)';
+        if (score >= 50) return 'var(--accent-warning)';
+        return 'var(--accent-success)';
     };
 
     return (
@@ -192,110 +189,74 @@ export default function Analysis({
             {analysisData && (
                 <div className="animate-fade-in-up">
                     <div className="section-title" style={{ marginTop: 'var(--space-lg)' }}>
-                        ⚡ Intelligence Signals — {analysisData.competitor_name}
+                        ⚡ Intelligence Report — {analysisData.competitor_name}
                     </div>
 
-                    {/* Signal Cards */}
-                    <div className="stagger-children" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-                        {(analysisData.signals || []).map((signal, i) => (
-                            <div className="glass-card" key={signal.id || i}>
-                                <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 'var(--space-md)' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center', marginBottom: 'var(--space-sm)', flexWrap: 'wrap' }}>
-                                            <span className={`badge badge-${signal.signal_type}`}>
-                                                {signal.signal_type === 'threat' ? '⚠️' : '🟢'} {signal.signal_type}
-                                            </span>
-                                            <span className={`badge badge-${signal.severity}`}>
-                                                {signal.severity}
-                                            </span>
-                                            <span className="badge" style={{ background: 'var(--bg-glass)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
-                                                {signal.category}
-                                            </span>
-                                        </div>
-                                        <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 'var(--space-xs)' }}>
-                                            {signal.title}
-                                        </h3>
-                                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6 }}>
-                                            {signal.description}
-                                        </p>
-                                    </div>
+                    {/* Executive Summary */}
+                    <div className="glass-card" style={{ marginBottom: 'var(--space-xl)', borderLeft: '4px solid var(--accent-primary)' }}>
+                        <h3 style={{ fontSize: '1.2rem', marginBottom: 'var(--space-sm)' }}>Executive Summary</h3>
+                        <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{analysisData.executive_summary}</p>
+                    </div>
 
-                                    {/* Score bars */}
-                                    <div style={{ minWidth: 140, display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                                        <div>
-                                            <div className="label">Relevance</div>
-                                            <div className="score-bar">
-                                                <div className="score-bar-track">
-                                                    <div
-                                                        className="score-bar-fill"
-                                                        style={{
-                                                            width: `${signal.relevance}%`,
-                                                            background: `linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))`,
-                                                        }}
-                                                    />
-                                                </div>
-                                                <div className="score-bar-value">{Math.round(signal.relevance)}</div>
-                                            </div>
+                    <div className="grid-2" style={{ marginBottom: 'var(--space-xl)' }}>
+                        {/* Threats */}
+                        <div className="glass-card--static">
+                            <h3 style={{ color: 'var(--accent-danger)', marginBottom: 'var(--space-md)' }}>⚠️ Critical Threats</h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+                                {(analysisData.signals?.threats || []).map((threat, i) => (
+                                    <div key={i} style={{ paddingBottom: 'var(--space-sm)', borderBottom: '1px solid var(--border-color)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <strong style={{ fontSize: '0.95rem' }}>{threat.title}</strong>
+                                            <span className="badge" style={{ background: getScoreColor(threat.severity_score), color: '#000' }}>
+                                                Sev: {threat.severity_score}
+                                            </span>
                                         </div>
-                                        <div>
-                                            <div className="label">Confidence</div>
-                                            <div className="score-bar">
-                                                <div className="score-bar-track">
-                                                    <div
-                                                        className="score-bar-fill"
-                                                        style={{
-                                                            width: `${signal.confidence}%`,
-                                                            background: severityColor(signal.severity),
-                                                        }}
-                                                    />
-                                                </div>
-                                                <div className="score-bar-value">{Math.round(signal.confidence)}</div>
+                                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 8 }}>{threat.description}</p>
+                                        {threat.evidence?.[0] && (
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', borderLeft: '2px solid rgba(255,255,255,0.1)', paddingLeft: 8 }}>
+                                                "{threat.evidence[0]}"
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
-                                </div>
-
-                                {/* Evidence */}
-                                {signal.evidence?.length > 0 && (
-                                    <div style={{ marginTop: 'var(--space-md)', paddingTop: 'var(--space-md)', borderTop: '1px solid var(--border-color)' }}>
-                                        <div className="label" style={{ marginBottom: 'var(--space-xs)' }}>Evidence</div>
-                                        {signal.evidence.map((ev, j) => (
-                                            <div key={j} style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 2 }}>
-                                                📍 <em>"{ev.quote?.substring(0, 120)}..."</em>
-                                                {ev.source_url && (
-                                                    <a href={ev.source_url} target="_blank" rel="noopener" style={{ marginLeft: 'var(--space-sm)' }}>
-                                                        [{ev.page_type || 'source'}]
-                                                    </a>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                ))}
                             </div>
-                        ))}
+                        </div>
+
+                        {/* Opportunities */}
+                        <div className="glass-card--static">
+                            <h3 style={{ color: 'var(--accent-success)', marginBottom: 'var(--space-md)' }}>🟢 Strategic Opportunities</h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+                                {(analysisData.signals?.opportunities || []).map((opp, i) => (
+                                    <div key={i} style={{ paddingBottom: 'var(--space-sm)', borderBottom: '1px solid var(--border-color)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <strong style={{ fontSize: '0.95rem' }}>{opp.title}</strong>
+                                            <span className="badge badge-opportunity">{opp.opportunity_type}</span>
+                                        </div>
+                                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 8 }}>{opp.description}</p>
+                                        {opp.evidence?.[0] && (
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', borderLeft: '2px solid rgba(255,255,255,0.1)', paddingLeft: 8 }}>
+                                                "{opp.evidence[0]}"
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Feature Comparison */}
-                    {analysisData.feature_comparison && (
-                        <div style={{ marginTop: 'var(--space-xl)' }}>
-                            <div className="section-title">🔧 Feature Comparison</div>
+                    {/* Marketing Vs Reality */}
+                    {analysisData.marketing_vs_reality_gaps?.length > 0 && (
+                        <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
+                            <div className="section-title">🎭 Marketing vs Reality Gaps</div>
                             <div className="grid-2">
-                                <div className="glass-card--static">
-                                    <h4 style={{ color: 'var(--accent-success)', marginBottom: 'var(--space-sm)', fontSize: '0.9rem' }}>✅ Your Advantages</h4>
-                                    <ul style={{ paddingLeft: 'var(--space-md)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                        {(analysisData.feature_comparison.your_advantages || []).map((f, i) => (
-                                            <li key={i}>{f}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                                <div className="glass-card--static">
-                                    <h4 style={{ color: 'var(--accent-danger)', marginBottom: 'var(--space-sm)', fontSize: '0.9rem' }}>⚠️ Their Advantages</h4>
-                                    <ul style={{ paddingLeft: 'var(--space-md)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                        {(analysisData.feature_comparison.their_advantages || []).map((f, i) => (
-                                            <li key={i}>{f}</li>
-                                        ))}
-                                    </ul>
-                                </div>
+                                {analysisData.marketing_vs_reality_gaps.map((gap, i) => (
+                                    <div key={i} className="glass-card" style={{ padding: 'var(--space-md)' }}>
+                                        <div style={{ color: 'var(--accent-warning)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Claim</div>
+                                        <p style={{ fontSize: '0.9rem', marginBottom: 'var(--space-md)', color: 'var(--text-primary)' }}>"{gap.claim}"</p>
+                                        <div style={{ color: 'var(--accent-primary)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Reality</div>
+                                        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{gap.reality}</p>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}

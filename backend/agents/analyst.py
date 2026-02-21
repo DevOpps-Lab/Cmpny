@@ -6,101 +6,227 @@ from config import settings
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
-ANALYSIS_PROMPT = """You are an elite competitive intelligence analyst. You have two inputs:
+ANALYSIS_PROMPT = """You are an elite Corporate Intelligence Analyst AI with deep expertise in 
+synthesizing competitive signals across websites, social media, news, and 
+community forums. You will receive raw scraped data from multiple sources 
+about a competitor and produce a structured intelligence report.
 
-1. YOUR COMPANY (the user's company):
-{company_profile}
+## INPUT DATA FORMAT
+Each piece of content is tagged with its source:
+- [WEB] - Official competitor website pages
+- [REDDIT] - Reddit threads and comments
+- [NEWS] - News articles and press releases
+- [LINKEDIN_JOBS] - Job postings (used to infer roadmap)
+- [REVIEWS] - Public customer reviews
 
-2. COMPETITOR PAGES (scraped and classified):
-{competitor_pages}
+## OUR COMPANY DNA
+Name: {company_name}
+Value Proposition: {value_prop}
+Target Audience: {target_audience}
+Key Features: {key_features}
 
-Perform DIFFERENTIAL REASONING — compare the competitor's strategy, features, pricing, and positioning AGAINST the user's company.
+## COMPETITOR RAW DATA
+{multi_source_scraped_data}
 
-Return valid JSON ONLY with this structure:
+---
+
+## YOUR ANALYSIS INSTRUCTIONS
+
+### STEP 1 — TRIANGULATE SIGNALS
+Never trust a single source. Cross-reference claims:
+- If their website says "best support" BUT Reddit shows repeated 
+  support complaints → mark as MARKETING vs REALITY GAP
+- If a signal appears in 2+ independent sources → mark as 
+  corroborated: true and boost confidence score
+- If only 1 source mentions it → corroborated: false, lower confidence
+
+### STEP 2 — INFER ROADMAP FROM JOBS
+Scan [LINKEDIN_JOBS] tags and infer what they are building.
+Map each job signal to a threat level for us.
+
+### STEP 3 — SCORE COMMUNITY SENTIMENT
+From [REDDIT] and [REVIEWS] data:
+- Extract the top recurring praise themes
+- Extract the top recurring complaint themes
+- Calculate an overall sentiment score from -100 (very negative) to +100 (very positive)
+- Identify any viral moments, controversies, or notable events
+
+### STEP 4 — FIND OUR OPPORTUNITIES
+Look for their weaknesses that match our strengths:
+- Pricing complaints → opportunity if we are cheaper or more flexible
+- Missing features → opportunity if we have them
+- Poor support sentiment → opportunity if support is our strength
+- Enterprise focus → opportunity if we serve SMBs better
+
+### STEP 5 — ASSESS THREATS TO US
+Look for their strengths that challenge us:
+- New features we lack
+- Pricing moves that undercut us
+- Partnerships or integrations that expand their moat
+- Talent hiring that signals a strategic pivot toward our core market
+
+---
+
+## STRICT OUTPUT RULES
+1. Return ONLY valid raw JSON. No markdown, no explanation, no preamble.
+2. Do not wrap in code blocks or backticks.
+3. Every field in the schema below must be present even if empty array.
+4. evidence fields must be direct quotes from the provided data.
+5. If data is insufficient for a field, use null or empty array [].
+
+---
+
+## OUTPUT JSON SCHEMA
+
 {{
-  "competitor_name": "Detected competitor name",
-  "signals": [
-    {{
-      "signal_type": "threat" or "opportunity",
-      "category": "feature_gap" | "pricing" | "market_shift" | "positioning" | "enterprise" | "integration" | "security" | "content_strategy",
-      "title": "Clear, actionable signal title",
-      "description": "2-3 sentence explanation of why this matters",
-      "severity": "existential" | "moderate" | "minor",
-      "relevance": 0-100,
-      "confidence": 0-100,
-      "evidence": [
-        {{"source_url": "URL where this was found", "quote": "Key quote or data point", "page_type": "Page type"}}
-      ]
-    }}
-  ],
-  "feature_comparison": {{
-    "your_advantages": ["Features/capabilities you have that they don't"],
-    "their_advantages": ["Features/capabilities they have that you don't"],
-    "shared_features": ["Features you both have"],
-    "feature_gaps": [
-      {{"feature": "Feature name", "gap_severity": "critical" | "moderate" | "minor", "description": "What's missing"}}
+  "competitor_name": "string — name of the competitor",
+  "sources_analyzed": ["list of source types that had usable data"],
+  "analysis_confidence": "low | medium | high — based on data richness",
+
+  "signals": {{
+    "threats": [
+      {{
+        "title": "short title of the threat",
+        "description": "2-3 sentence explanation of why this threatens us",
+        "severity_score": 0,
+        "confidence_score": 0,
+        "corroborated": false,
+        "source_types": ["WEB", "REDDIT"],
+        "evidence": ["direct quote from scraped data supporting this"]
+      }}
+    ],
+    "opportunities": [
+      {{
+        "title": "short title of the opportunity",
+        "description": "2-3 sentence explanation of how we can exploit this",
+        "confidence_score": 0,
+        "corroborated": false,
+        "opportunity_type": "pricing | feature | market | sentiment",
+        "source_types": ["REDDIT", "REVIEWS"],
+        "evidence": ["direct quote from scraped data supporting this"]
+      }}
     ]
   }},
-  "pricing_comparison": {{
-    "your_pricing_summary": "Summary of your pricing",
-    "their_pricing_summary": "Summary of their pricing",
-    "price_advantage": "you" | "them" | "comparable",
-    "key_differences": ["Notable pricing strategy differences"]
-  }},
-  "market_insights": {{
-    "positioning_overlap": 0-100,
-    "target_audience_overlap": 0-100,
-    "competitive_intensity": "high" | "medium" | "low",
-    "market_trends": ["Relevant market trends observed"]
-  }}
-}}
 
-RULES:
-- Only include signals with confidence >= 40
-- Every signal MUST have at least one evidence item
-- Be specific, not generic — cite actual features, prices, and strategies
-- Focus on ACTIONABLE intelligence, not observations
-- Identify at least 3 threats and 3 opportunities if the data supports it"""
+  "marketing_vs_reality_gaps": [
+    {{
+      "claim": "exact claim made on their website or marketing",
+      "reality": "what customers or community actually say",
+      "gap_severity": "low | medium | high",
+      "evidence": ["quotes showing the contradiction"]
+    }}
+  ],
+
+  "inferred_roadmap": [
+    {{
+      "inference": "what we believe they are building or planning",
+      "reasoning": "why we infer this from the job/news data",
+      "source_signal": "the job title or news headline that triggered this",
+      "timeline_estimate": "short_term | medium_term | long_term",
+      "threat_level_to_us": 0
+    }}
+  ],
+
+  "community_sentiment": {{
+    "overall_score": 0,
+    "top_praise_themes": ["theme 1", "theme 2"],
+    "top_complaint_themes": ["complaint 1", "complaint 2"],
+    "sentiment_trend": "improving | declining | stable | unknown",
+    "viral_moments": ["any notable controversies, wins, or events found"]
+  }},
+
+  "feature_gap_analysis": {{
+    "we_win": [
+      {{
+        "area": "feature or capability name",
+        "evidence": "why we win here based on their data"
+      }}
+    ],
+    "they_win": [
+      {{
+        "area": "feature or capability name",
+        "evidence": "why they win here based on scraped data"
+      }}
+    ],
+    "contested": [
+      {{
+        "area": "feature or capability name",
+        "note": "why this is unclear or close"
+      }}
+    ]
+  }},
+
+  "pricing_intelligence": {{
+    "model": "freemium | subscription | usage_based | enterprise | unknown",
+    "tiers_found": [
+      {{
+        "name": "tier name e.g. Starter",
+        "price": "price string or unknown",
+        "key_limits": ["list of limits or features mentioned"]
+      }}
+    ],
+    "community_price_perception": "too_expensive | fair | cheap | unknown",
+    "pricing_complaints": ["list of specific complaints about their pricing"]
+  }},
+
+  "radar_scores": {{
+    "features": 0,
+    "pricing": 0,
+    "market_position": 0,
+    "growth_trajectory": 0,
+    "enterprise_readiness": 0,
+    "community_strength": 0
+  }},
+
+  "executive_summary": "3-4 sentence plain English summary of the most critical findings a founder needs to act on immediately. Be direct and specific."
+}}"""
 
 
 async def run_analyst(company_profile: dict, competitor_pages: list[dict]) -> dict:
     """
-    Run differential analysis comparing company DNA vs competitor data.
-    
-    Args:
-        company_profile: User's company DNA dict
-        competitor_pages: List of {url, title, content_md, page_type, strategic_score}
-    
-    Returns:
-        Full analysis dict with signals, feature comparison, pricing comparison, market insights
+    Run differential analysis comparing company DNA vs competitor data using the advanced prompt.
     """
-    # Build company profile summary
-    company_text = json.dumps({
-        "name": company_profile.get("name", ""),
-        "summary": company_profile.get("summary", ""),
-        "features": company_profile.get("features", []),
-        "icp": company_profile.get("icp", {}),
-        "positioning": company_profile.get("positioning", {}),
-        "pricing": company_profile.get("pricing", {}),
-    }, indent=2)
+    company_name = company_profile.get("name", "Unknown Company")
+    value_prop = company_profile.get("positioning", {}).get("value_proposition", "Unknown")
+    target_audience = company_profile.get("icp", {}).get("industry", "Unknown target audience")
+    company_features = company_profile.get("features", [])
+    if company_features and isinstance(company_features[0], dict):
+        key_features = ", ".join([f.get("name", "") for f in company_features])
+    else:
+        key_features = ", ".join([str(f) for f in company_features])
 
     # Build competitor pages summary — prioritize high-strategic-score pages
     sorted_pages = sorted(competitor_pages, key=lambda p: p.get("strategic_score", 0), reverse=True)
     
     competitor_text = ""
     for page in sorted_pages[:20]:  # Top 20 strategic pages
+        
+        # Determine the source tag based on the new page_types we added
+        ptype = page.get("page_type", "")
+        if ptype == "REDDIT_SOURCE":
+            tag = "[REDDIT]"
+        elif ptype == "NEWS_SOURCE":
+            tag = "[NEWS]"
+        elif ptype == "JOB_SOURCE":
+            tag = "[LINKEDIN_JOBS]"
+        else:
+            tag = "[WEB]"
+            
         content = page["content_md"][:3000]  # Limit per page
-        competitor_text += f"\n\n--- [{page['page_type']}] {page['title']} ({page['url']}) ---\n{content}"
+        competitor_text += f"\n\n{tag} --- {page['title']} ({page['url']}) ---\n{content}"
 
     # Truncate total if needed
-    if len(competitor_text) > 60000:
-        competitor_text = competitor_text[:60000]
+    if len(competitor_text) > 80000:
+        competitor_text = competitor_text[:80000]
 
     model = genai.GenerativeModel("gemini-2.5-flash")
     response = await model.generate_content_async(
         ANALYSIS_PROMPT.format(
-            company_profile=company_text,
-            competitor_pages=competitor_text
+            company_name=company_name,
+            value_prop=value_prop,
+            target_audience=target_audience,
+            key_features=key_features,
+            multi_source_scraped_data=competitor_text
         ),
         generation_config=genai.GenerationConfig(
             temperature=0.3,
@@ -117,7 +243,13 @@ async def run_analyst(company_profile: dict, competitor_pages: list[dict]) -> di
         if start >= 0 and end > start:
             result = json.loads(text[start:end])
         else:
-            result = {"signals": [], "feature_comparison": {}, "pricing_comparison": {}, "market_insights": {}}
+            result = {
+                "competitor_name": "Unknown",
+                "executive_summary": "Analysis failed to parse JSON structure.",
+                "signals": {"threats": [], "opportunities": []},
+                "feature_gap_analysis": {"we_win": [], "they_win": [], "contested": []},
+                "radar_scores": {"features": 5, "pricing": 5, "market_position": 5, "growth_trajectory": 5, "enterprise_readiness": 5, "community_strength": 5}
+            }
 
     return result
 

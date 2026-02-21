@@ -5,6 +5,7 @@ import json
 import uuid
 import traceback
 from typing import Dict, Optional
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,15 +68,37 @@ async def add_competitor(req: CompetitorRequest, db: AsyncSession = Depends(get_
     comp_id = competitor.id
     _running_jobs[comp_id] = job_id
 
-    async def _background_crawl():
+    async def _background_crawl(comp_name_guess=""):
         print("[CRAWL] Starting background crawl for competitor %d, url=%s, job=%s" % (comp_id, url, job_id))
         from database import async_session
+        from services.scraper import fetch_reddit_data, fetch_news_data, fetch_jobs_data
+        
         async with async_session() as session:
             try:
-                pages = await run_scout(job_id, url, max_pages=settings.MAX_CRAWL_PAGES)
+                # To search Reddit/News/Jobs effectively we need a name, we'll try to guess it from the URL
+                # e.g., https://www.stripe.com -> stripe
+                name_query = urlparse(url).netloc.replace("www.", "").split(".")[0]
+                
+                await event_bus.publish(job_id, "log", {"message": f"Fetching multi-source intelligence for '{name_query}'..."})
+
+                # Run web scout and external fetchers concurrently
+                scout_task = asyncio.create_task(run_scout(job_id, url, max_pages=settings.MAX_CRAWL_PAGES))
+                reddit_task = asyncio.create_task(fetch_reddit_data(name_query))
+                news_task = asyncio.create_task(fetch_news_data(name_query))
+                jobs_task = asyncio.create_task(fetch_jobs_data(name_query))
+
+                pages, reddit_md, news_md, jobs_md = await asyncio.gather(
+                    scout_task, reddit_task, news_task, jobs_task, return_exceptions=True
+                )
+
+                # Handle potential exceptions in gather
+                if isinstance(pages, Exception):
+                    raise pages
+                
                 print("[CRAWL] Scout returned %d pages for competitor %d" % (len(pages), comp_id))
 
                 comp_name = ""
+                # Save normal web pages
                 for page_data in pages:
                     page = CrawledPage(
                         url=page_data["url"],
@@ -87,14 +110,44 @@ async def add_competitor(req: CompetitorRequest, db: AsyncSession = Depends(get_
                     )
                     session.add(page)
                     if not comp_name and page_data["title"]:
+                        # A better guess based on the actual homepage title
                         comp_name = page_data["title"].split("|")[0].split("-")[0].strip()
+
+                # Save external data as high-priority pages so Analyst guarantees to see them
+                if isinstance(reddit_md, str) and reddit_md:
+                    session.add(CrawledPage(
+                        url=f"reddit://search/{name_query}",
+                        title=f"{name_query} Reddit Discussions",
+                        content_md=reddit_md,
+                        page_type="REDDIT_SOURCE",
+                        strategic_score=95,
+                        competitor_id=comp_id,
+                    ))
+                if isinstance(news_md, str) and news_md:
+                    session.add(CrawledPage(
+                        url=f"news://search/{name_query}",
+                        title=f"{name_query} Recent News",
+                        content_md=news_md,
+                        page_type="NEWS_SOURCE",
+                        strategic_score=95,
+                        competitor_id=comp_id,
+                    ))
+                if isinstance(jobs_md, str) and jobs_md:
+                    session.add(CrawledPage(
+                        url=f"jobs://search/{name_query}",
+                        title=f"{name_query} Open Jobs",
+                        content_md=jobs_md,
+                        page_type="JOB_SOURCE",
+                        strategic_score=95,
+                        competitor_id=comp_id,
+                    ))
 
                 result = await session.execute(
                     select(Competitor).where(Competitor.id == comp_id)
                 )
                 comp = result.scalar_one()
                 comp.status = "crawled"
-                comp.page_count = len(pages)
+                comp.page_count = len(pages) + 3 # approx incl external
                 if comp_name:
                     comp.name = comp_name
 

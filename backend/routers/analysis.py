@@ -95,19 +95,42 @@ async def run_analysis(competitor_id: int, db: AsyncSession = Depends(get_db)):
     if comp_name and not competitor.name:
         competitor.name = comp_name
 
-    # Store signals
-    signals_data = analysis.get("signals", [])
+    # Store signals mapped from threats and opportunities
+    signals_data = analysis.get("signals", {})
+    threats = signals_data.get("threats", [])
+    opportunities = signals_data.get("opportunities", [])
+    
     stored_signals = []
-    for sig_data in signals_data:
+    
+    # Process threats
+    for t in threats:
+        sev_score = t.get("severity_score", 50)
+        sev_str = "existential" if sev_score >= 80 else ("minor" if sev_score <= 30 else "moderate")
         signal = Signal(
-            signal_type=sig_data.get("signal_type", "opportunity"),
-            category=sig_data.get("category", ""),
-            title=sig_data.get("title", ""),
-            description=sig_data.get("description", ""),
-            severity=sig_data.get("severity", "moderate"),
-            relevance=sig_data.get("relevance", 50),
-            confidence=sig_data.get("confidence", 50),
-            evidence=sig_data.get("evidence", []),
+            signal_type="threat",
+            category="",
+            title=t.get("title", ""),
+            description=t.get("description", ""),
+            severity=sev_str,
+            relevance=sev_score,
+            confidence=t.get("confidence_score", 50),
+            evidence=t.get("evidence", []),
+            competitor_id=competitor_id,
+        )
+        db.add(signal)
+        stored_signals.append(signal)
+
+    # Process opportunities
+    for o in opportunities:
+        signal = Signal(
+            signal_type="opportunity",
+            category=o.get("opportunity_type", ""),
+            title=o.get("title", ""),
+            description=o.get("description", ""),
+            severity="moderate",
+            relevance=o.get("confidence_score", 50), # opportunities use confidence as relevance proxy
+            confidence=o.get("confidence_score", 50),
+            evidence=o.get("evidence", []),
             competitor_id=competitor_id,
         )
         db.add(signal)
@@ -116,17 +139,13 @@ async def run_analysis(competitor_id: int, db: AsyncSession = Depends(get_db)):
     competitor.status = "analyzed"
     await db.commit()
 
-    # Refresh signals to get IDs
-    for s in stored_signals:
-        await db.refresh(s)
-
-    return {
-        "competitor_name": comp_name,
-        "signals": stored_signals,
-        "feature_comparison": analysis.get("feature_comparison", {}),
-        "pricing_comparison": analysis.get("pricing_comparison", {}),
-        "market_insights": analysis.get("market_insights", {}),
-    }
+    # Pass the full raw analysis straight back to the frontend so it can render the new UI beautifully,
+    # but also add the stored DB signals for components that might need the IDs.
+    analysis["stored_signals"] = [
+        {"id": s.id, "title": s.title, "type": s.signal_type} for s in stored_signals
+    ]
+    
+    return analysis
 
 
 @router.get("/{competitor_id}/signals", response_model=list[SignalResponse])
