@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
     MAX_CRAWL_PAGES: int = 10
+    
+    # SMTP settings for real email dispatch
+    SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    FROM_EMAIL: str = os.getenv("FROM_EMAIL", SMTP_USERNAME)
 
     class Config:
         env_file = ".env"

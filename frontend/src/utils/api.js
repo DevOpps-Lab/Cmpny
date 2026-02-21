@@ -73,6 +73,13 @@ export const getAlerts = (competitorId) =>
 // --- Compare ---
 export const compareCompetitors = (competitorIds) =>
     request(`/compare?competitor_ids=${competitorIds.join(',')}`);
+
+// --- Sales ---
+export const generateSalesSequence = (competitorId, data) =>
+    request(`/sales/generate/${competitorId}`, { method: 'POST', body: data });
+
+export const sendSalesEmail = (recipientEmail, subject, body) =>
+    request('/sales/send', { method: 'POST', body: { recipient_email: recipientEmail, subject, body } });
 // --- SSE Helper with job_id ---
 export function subscribeToStream(competitorId, onEvent, jobId = null) {
     // Use job_id endpoint if available (more reliable), otherwise fall back to competitor_id

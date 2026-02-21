@@ -10,7 +10,7 @@ import {
     Legend,
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import { setMonitor, getMonitor, getAlerts } from '../utils/api';
+import { setMonitor, getMonitor, getAlerts, generateSalesSequence, sendSalesEmail } from '../utils/api';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
@@ -82,6 +82,54 @@ export default function Dashboard({
             setMonitorError(err.message || 'Failed to save monitoring settings');
         } finally {
             setMonitorSaving(false);
+        }
+    };
+
+    // --- Sales Sequence state ---
+    const [salesSequence, setSalesSequence] = useState(null);
+    const [generatingSales, setGeneratingSales] = useState(false);
+    const [salesError, setSalesError] = useState('');
+
+    const handleGenerateSales = async () => {
+        setGeneratingSales(true);
+        setSalesError('');
+        try {
+            // Map the feature gap objects into simple strings for the sales prompt
+            const weWinStr = (featureGaps.we_win || []).map(f => f.feature || f.area || JSON.stringify(f));
+
+            const result = await generateSalesSequence(competitorId, {
+                competitor_name: analysisData?.competitor_name || "Competitor",
+                pricing_model: pricingIntel.model || "Unknown",
+                pricing_complaints: pricingIntel.pricing_complaints || [],
+                we_win_features: weWinStr
+            });
+            setSalesSequence(result.sequence);
+        } catch (err) {
+            setSalesError(err.message || 'Failed to generate sequence');
+        } finally {
+            setGeneratingSales(false);
+        }
+    };
+
+    const [recipientEmail, setRecipientEmail] = useState('');
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [sendSuccess, setSendSuccess] = useState('');
+
+    const handleSendEmail = async () => {
+        if (!recipientEmail || !salesSequence || salesSequence.length === 0) return;
+        setSendingEmail(true);
+        setSendSuccess('');
+        setSalesError('');
+        try {
+            const touch1 = salesSequence[0];
+            const result = await sendSalesEmail(recipientEmail, touch1.subject, touch1.body);
+            setSendSuccess(result.message);
+            setRecipientEmail('');
+            setTimeout(() => setSendSuccess(''), 5000);
+        } catch (err) {
+            setSalesError(err.message || 'Failed to send email');
+        } finally {
+            setSendingEmail(false);
         }
     };
 
@@ -347,6 +395,88 @@ export default function Dashboard({
                 <button className="btn btn-primary btn-lg" onClick={(e) => { e.stopPropagation(); navigate('/compare'); }}>
                     🔀 Compare Competitors
                 </button>
+            </div>
+
+            {/* ========== Sales Email Generator ========== */}
+            <div className="glass-card" style={{ marginBottom: 'var(--space-xl)' }}>
+                <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>🎯 AI Sales Outbound Sequence</span>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleGenerateSales}
+                        disabled={generatingSales}
+                        style={{ backgroundColor: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
+                    >
+                        {generatingSales ? (
+                            <><span className="loading-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Writing...</>
+                        ) : '✍️ Generate Sequence'}
+                    </button>
+                </div>
+
+                {!salesSequence && !generatingSales && (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                        Convert this competitive intelligence into a 3-touch outbound email sequence.
+                        The AI will target {analysisData.competitor_name}'s customers by exploiting their specific pricing complaints and feature gaps.
+                    </p>
+                )}
+
+                {salesError && <p style={{ color: 'var(--accent-danger)', marginTop: 'var(--space-sm)' }}>❌ {salesError}</p>}
+
+                {salesSequence && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
+                        {salesSequence.map((email, idx) => (
+                            <div key={idx} style={{
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: 'var(--space-md)'
+                            }}>
+                                <div style={{ fontWeight: '600', color: 'var(--accent-primary)', marginBottom: 'var(--space-xs)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                    Touch {email.touch}
+                                </div>
+                                <div style={{ fontSize: '0.9rem', marginBottom: 'var(--space-sm)', color: 'var(--text-primary)' }}>
+                                    <strong>Subject:</strong> {email.subject}
+                                </div>
+                                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                    {email.body}
+                                </div>
+                            </div>
+                        ))}
+
+                        {/* Send Email Action Area */}
+                        <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'rgba(108, 92, 231, 0.1)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(108, 92, 231, 0.2)' }}>
+                            <div style={{ fontWeight: '600', marginBottom: 'var(--space-sm)', color: 'var(--text-primary)' }}>🚀 Automate Outreach</div>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-md)' }}>Approve this sequence and instantly dispatch Touch 1 to a prospect.</p>
+
+                            <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
+                                <input
+                                    type="email"
+                                    className="input-field"
+                                    placeholder="prospect@company.com"
+                                    value={recipientEmail}
+                                    onChange={(e) => setRecipientEmail(e.target.value)}
+                                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' }}
+                                    disabled={sendingEmail}
+                                />
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleSendEmail}
+                                    disabled={sendingEmail || !recipientEmail}
+                                    style={{ whiteSpace: 'nowrap' }}
+                                >
+                                    {sendingEmail ? (
+                                        <><span className="loading-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Sending...</>
+                                    ) : '📤 Send Touch 1'}
+                                </button>
+                            </div>
+                            {sendSuccess && (
+                                <div style={{ marginTop: 'var(--space-sm)', color: 'var(--accent-success)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    ✅ {sendSuccess}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ========== Continuous Monitoring Section ========== */}
