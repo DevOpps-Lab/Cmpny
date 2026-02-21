@@ -100,6 +100,10 @@ async def add_competitor(req: CompetitorRequest, db: AsyncSession = Depends(get_
 
                 await session.commit()
                 print("[CRAWL] Crawl complete for competitor %d: %d pages, name=%s" % (comp_id, len(pages), comp_name))
+                await event_bus.publish(job_id, "done", {
+                    "message": "Crawl complete",
+                    "total_pages": len(pages)
+                })
             except Exception as e:
                 print("[CRAWL] Crawl FAILED for competitor %d: %s" % (comp_id, str(e)))
                 traceback.print_exc()

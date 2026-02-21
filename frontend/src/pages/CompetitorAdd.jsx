@@ -1,16 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addCompetitor, subscribeToStream, getCompetitor } from '../utils/api';
+import { addCompetitor, subscribeToStream, getCompetitor, listCompetitors } from '../utils/api';
 
-export default function CompetitorAdd({ companyId, onComplete, competitorId }) {
+export default function CompetitorAdd({
+    companyId,
+    competitors,
+    onCompetitorAdded,
+    onCompetitorUpdated,
+    onSelectCompetitor,
+    activeCompetitorId,
+}) {
     const [url, setUrl] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [logs, setLogs] = useState([]);
-    const [crawlDone, setCrawlDone] = useState(false);
-    const [currentCompetitor, setCurrentCompetitor] = useState(null);
+    const [crawlingCompId, setCrawlingCompId] = useState(null);
     const terminalRef = useRef(null);
     const navigate = useNavigate();
+
+    // Load existing competitors on mount
+    useEffect(() => {
+        if (!companyId) return;
+        listCompetitors(companyId).then((data) => {
+            data.forEach((c) => onCompetitorAdded(c));
+        }).catch(() => { });
+    }, [companyId]);
 
     // Auto-scroll terminal
     useEffect(() => {
@@ -37,46 +51,48 @@ export default function CompetitorAdd({ companyId, onComplete, competitorId }) {
         setLoading(true);
         setError('');
         setLogs([]);
-        setCrawlDone(false);
+        setCrawlingCompId(null);
 
         try {
             const comp = await addCompetitor(url.trim(), companyId);
-            setCurrentCompetitor(comp);
-            onComplete(comp);
+            onCompetitorAdded(comp);
+            onSelectCompetitor(comp.id);
+            setCrawlingCompId(comp.id);
+            setUrl('');
 
-            // Subscribe to SSE stream using job_id for reliable connection
             const unsubscribe = subscribeToStream(comp.id, (event) => {
-                console.log('SSE event:', event);
                 const logEntry = {
                     time: new Date().toLocaleTimeString(),
                     type: getLogType(event.event),
                     message: event.data?.message || '',
                     details: [],
                 };
+                if (event.data?.page_type) logEntry.details.push(event.data.page_type);
+                if (event.data?.strategic_score) logEntry.details.push(event.data.strategic_score);
 
-                // Add classification details
-                if (event.data?.page_type) {
-                    logEntry.details.push(event.data.page_type);
-                }
-                if (event.data?.strategic_score) {
-                    logEntry.details.push(event.data.strategic_score);
-                }
-
-                setLogs(prev => [...prev, logEntry]);
+                setLogs((prev) => [...prev, logEntry]);
 
                 if (event.event === 'done') {
-                    setCrawlDone(true);
                     setLoading(false);
-                    // Refresh competitor data
-                    getCompetitor(comp.id).then(setCurrentCompetitor).catch(() => { });
+                    getCompetitor(comp.id).then((updated) => {
+                        onCompetitorUpdated(updated);
+                    }).catch(() => { });
                 }
-            });
+            }, comp.job_id);
 
-            // Cleanup on unmount
             return () => unsubscribe();
         } catch (err) {
             setError(err.message || 'Failed to add competitor');
             setLoading(false);
+        }
+    };
+
+    const statusBadge = (status) => {
+        switch (status) {
+            case 'crawling': return <span className="badge" style={{ background: 'var(--accent-warning)', color: '#000' }}>⏳ Crawling</span>;
+            case 'crawled': return <span className="badge badge-opportunity">✅ Ready</span>;
+            case 'failed': return <span className="badge badge-threat">❌ Failed</span>;
+            default: return <span className="badge">{status}</span>;
         }
     };
 
@@ -93,40 +109,74 @@ export default function CompetitorAdd({ companyId, onComplete, competitorId }) {
                 <div className="step">📊 4. Dashboard</div>
             </div>
 
-            <h1 className="page-title">Add a Competitor</h1>
+            <h1 className="page-title">Scout Competitors</h1>
             <p className="page-subtitle">
-                Enter a competitor's website. Compy will intelligently crawl and classify their strategic pages.
+                Add competitor websites. Compy will intelligently crawl and classify their strategic pages.
             </p>
 
-            {/* URL Input */}
-            <form onSubmit={handleSubmit} style={{ marginBottom: 'var(--space-xl)' }}>
-                <div className="input-group">
-                    <input
-                        type="text"
-                        className="input"
-                        placeholder="https://competitor.com"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        disabled={loading}
-                        id="competitor-url-input"
-                    />
-                    <button
-                        type="submit"
-                        className="btn btn-primary btn-lg"
-                        disabled={loading || !url.trim()}
-                        id="scout-btn"
-                    >
-                        {loading ? (
-                            <>
-                                <span className="loading-spinner" style={{ width: 20, height: 20, borderWidth: 2 }} />
-                                Scouting...
-                            </>
-                        ) : (
-                            <>🕵️ Start Scout</>
-                        )}
-                    </button>
+            {/* Existing Competitors List */}
+            {competitors.length > 0 && (
+                <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
+                    <div className="section-title">📋 Your Competitors ({competitors.length})</div>
+                    <div className="competitor-list">
+                        {competitors.map((comp) => (
+                            <div
+                                className={`competitor-row ${activeCompetitorId === comp.id ? 'active' : ''}`}
+                                key={comp.id}
+                                onClick={() => onSelectCompetitor(comp.id)}
+                            >
+                                <div className="competitor-row-info">
+                                    <span className="competitor-row-name">{comp.name || comp.url}</span>
+                                    <span className="competitor-row-url">{comp.url}</span>
+                                </div>
+                                <div className="competitor-row-meta">
+                                    {statusBadge(comp.status)}
+                                    {comp.page_count > 0 && (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                            {comp.page_count} pages
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            </form>
+            )}
+
+            {/* URL Input — always visible */}
+            <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
+                <div className="section-title">
+                    {competitors.length > 0 ? '➕ Add Another Competitor' : '🕵️ Add Your First Competitor'}
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div className="input-group">
+                        <input
+                            type="text"
+                            className="input"
+                            placeholder="https://competitor.com"
+                            value={url}
+                            onChange={(e) => setUrl(e.target.value)}
+                            disabled={loading}
+                            id="competitor-url-input"
+                        />
+                        <button
+                            type="submit"
+                            className="btn btn-primary btn-lg"
+                            disabled={loading || !url.trim()}
+                            id="scout-btn"
+                        >
+                            {loading ? (
+                                <>
+                                    <span className="loading-spinner" style={{ width: 20, height: 20, borderWidth: 2 }} />
+                                    Scouting...
+                                </>
+                            ) : (
+                                <>🕵️ Start Scout</>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </div>
 
             {error && (
                 <div className="glass-card--static" style={{ borderColor: 'var(--accent-danger)', marginBottom: 'var(--space-lg)' }}>
@@ -142,7 +192,7 @@ export default function CompetitorAdd({ companyId, onComplete, competitorId }) {
                         <div className="terminal-dot terminal-dot--yellow" />
                         <div className="terminal-dot terminal-dot--green" />
                         <div className="terminal-title">
-                            Scout Agent — {loading ? '🔴 LIVE' : '✅ Complete'} — {currentCompetitor?.page_count || logs.filter(l => l.type === 'success').length} pages
+                            Scout Agent — {loading ? '🔴 LIVE' : '✅ Complete'}
                         </div>
                     </div>
                     <div className="terminal-body" ref={terminalRef}>
@@ -168,11 +218,12 @@ export default function CompetitorAdd({ companyId, onComplete, competitorId }) {
                 </div>
             )}
 
-            {/* Continue Button */}
-            {crawlDone && (
+            {/* Navigate to Analysis */}
+            {competitors.some((c) => c.status === 'crawled') && (
                 <div style={{ marginTop: 'var(--space-xl)', textAlign: 'center' }} className="animate-fade-in-up">
                     <p style={{ marginBottom: 'var(--space-md)', color: 'var(--text-secondary)' }}>
-                        ✅ Crawled <strong style={{ color: 'var(--accent-success)' }}>{currentCompetitor?.page_count || '?'}</strong> strategic pages
+                        ✅ <strong style={{ color: 'var(--accent-success)' }}>{competitors.filter(c => c.status === 'crawled').length}</strong> competitor{competitors.filter(c => c.status === 'crawled').length !== 1 ? 's' : ''} ready for analysis
+                        {loading && <span style={{ marginLeft: 8, color: 'var(--accent-warning)' }}>(1 still crawling...)</span>}
                     </p>
                     <button
                         className="btn btn-success btn-lg"

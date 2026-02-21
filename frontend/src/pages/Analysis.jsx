@@ -2,31 +2,74 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { runAnalysis, generatePlan } from '../utils/api';
 
-export default function Analysis({ competitorId, onAnalysisComplete, onPlanComplete, analysisData, planData }) {
+export default function Analysis({
+    competitors,
+    activeCompetitorId,
+    onSelectCompetitor,
+    analysisDataMap,
+    planDataMap,
+    onAnalysisComplete,
+    onPlanComplete,
+}) {
     const [analyzing, setAnalyzing] = useState(false);
+    const [analyzingId, setAnalyzingId] = useState(null);
     const [planning, setPlanning] = useState(false);
     const [error, setError] = useState('');
+    const [analyzingAll, setAnalyzingAll] = useState(false);
+    const [analyzeProgress, setAnalyzeProgress] = useState('');
     const navigate = useNavigate();
 
-    const handleAnalyze = async () => {
+    const readyCompetitors = competitors.filter((c) => c.status === 'crawled');
+    const analysisData = analysisDataMap[activeCompetitorId] || null;
+    const planData = planDataMap[activeCompetitorId] || null;
+
+    const analyzedCount = readyCompetitors.filter((c) => !!analysisDataMap[c.id]).length;
+    const pendingCount = readyCompetitors.length - analyzedCount;
+
+    const handleAnalyze = async (compId) => {
         setAnalyzing(true);
+        setAnalyzingId(compId);
         setError('');
         try {
-            const result = await runAnalysis(competitorId);
-            onAnalysisComplete(result);
+            const result = await runAnalysis(compId);
+            onAnalysisComplete(compId, result);
         } catch (err) {
             setError(err.message || 'Analysis failed');
         } finally {
             setAnalyzing(false);
+            setAnalyzingId(null);
         }
     };
 
+    const handleAnalyzeAll = async () => {
+        setAnalyzingAll(true);
+        setError('');
+        const pending = readyCompetitors.filter((c) => !analysisDataMap[c.id]);
+        for (let i = 0; i < pending.length; i++) {
+            const comp = pending[i];
+            setAnalyzeProgress(`Analyzing ${comp.name || comp.url} (${i + 1}/${pending.length})...`);
+            setAnalyzingId(comp.id);
+            onSelectCompetitor(comp.id);
+            try {
+                const result = await runAnalysis(comp.id);
+                onAnalysisComplete(comp.id, result);
+            } catch (err) {
+                setError(`Failed on ${comp.name || comp.url}: ${err.message}`);
+                break;
+            }
+        }
+        setAnalyzingAll(false);
+        setAnalyzingId(null);
+        setAnalyzeProgress('');
+    };
+
     const handlePlan = async () => {
+        if (!activeCompetitorId) return;
         setPlanning(true);
         setError('');
         try {
-            const result = await generatePlan(competitorId);
-            onPlanComplete(result);
+            const result = await generatePlan(activeCompetitorId);
+            onPlanComplete(activeCompetitorId, result);
         } catch (err) {
             setError(err.message || 'Planning failed');
         } finally {
@@ -61,37 +104,91 @@ export default function Analysis({ competitorId, onAnalysisComplete, onPlanCompl
                 Run differential reasoning to extract threats, opportunities, and generate a tactical roadmap.
             </p>
 
+            {/* All Competitors Overview */}
+            <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
+                <div className="section-title">
+                    🎯 Competitors ({analyzedCount}/{readyCompetitors.length} analyzed)
+                </div>
+
+                <div className="competitor-list">
+                    {readyCompetitors.map((comp) => {
+                        const hasAnalysis = !!analysisDataMap[comp.id];
+                        const isAnalyzing = analyzingId === comp.id;
+                        return (
+                            <div
+                                className={`competitor-row ${activeCompetitorId === comp.id ? 'active' : ''}`}
+                                key={comp.id}
+                                onClick={() => onSelectCompetitor(comp.id)}
+                            >
+                                <div className="competitor-row-info">
+                                    <span className="competitor-row-name">{comp.name || comp.url}</span>
+                                    <span className="competitor-row-url">{comp.url}</span>
+                                </div>
+                                <div className="competitor-row-meta">
+                                    {isAnalyzing ? (
+                                        <span className="badge" style={{ background: 'var(--accent-warning)', color: '#000' }}>
+                                            <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2, marginRight: 4 }} />
+                                            Analyzing...
+                                        </span>
+                                    ) : hasAnalysis ? (
+                                        <span className="badge badge-opportunity">✅ Analyzed</span>
+                                    ) : (
+                                        <button
+                                            className="btn btn-primary"
+                                            style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                                            onClick={(e) => { e.stopPropagation(); onSelectCompetitor(comp.id); handleAnalyze(comp.id); }}
+                                            disabled={analyzing || analyzingAll}
+                                        >
+                                            ⚡ Analyze
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Analyze All Button */}
+                {pendingCount > 0 && (
+                    <div style={{ marginTop: 'var(--space-lg)', textAlign: 'center' }}>
+                        {analyzingAll ? (
+                            <div className="loading-state" style={{ gap: 'var(--space-sm)' }}>
+                                <div className="loading-spinner" />
+                                <p>{analyzeProgress}</p>
+                            </div>
+                        ) : (
+                            <button
+                                className="btn btn-primary btn-lg"
+                                onClick={handleAnalyzeAll}
+                                disabled={analyzing}
+                                id="analyze-all-btn"
+                            >
+                                ⚡ Analyze All {pendingCount} Pending Competitor{pendingCount !== 1 ? 's' : ''}
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* All done → go to dashboard */}
+                {pendingCount === 0 && analyzedCount > 0 && !analyzingAll && (
+                    <div style={{ marginTop: 'var(--space-lg)', textAlign: 'center' }}>
+                        <p style={{ color: 'var(--accent-success)', marginBottom: 'var(--space-sm)', fontWeight: 600 }}>
+                            ✅ All {analyzedCount} competitors analyzed!
+                        </p>
+                        <button className="btn btn-success btn-lg" onClick={() => navigate('/dashboard')} id="go-to-dashboard-from-analysis">
+                            📊 View Dashboard →
+                        </button>
+                    </div>
+                )}
+            </div>
+
             {error && (
                 <div className="glass-card--static" style={{ borderColor: 'var(--accent-danger)', marginBottom: 'var(--space-lg)' }}>
                     <p style={{ color: 'var(--accent-danger)' }}>❌ {error}</p>
                 </div>
             )}
 
-            {/* Phase 1: Run Analysis */}
-            {!analysisData && (
-                <div style={{ textAlign: 'center', padding: 'var(--space-3xl) 0' }}>
-                    {analyzing ? (
-                        <div className="loading-state">
-                            <div className="loading-spinner" />
-                            <p>Running differential analysis with Gemini 1.5 Pro...</p>
-                            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Comparing strategies, features, pricing, and positioning</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div style={{ fontSize: '3rem', marginBottom: 'var(--space-md)' }}>🔬</div>
-                            <h2 style={{ marginBottom: 'var(--space-sm)' }}>Ready to Analyze</h2>
-                            <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-xl)', maxWidth: 500, margin: '0 auto var(--space-xl)' }}>
-                                Compy will compare the competitor's strategy against your company DNA and extract actionable intelligence.
-                            </p>
-                            <button className="btn btn-primary btn-lg" onClick={handleAnalyze} id="run-analysis-btn">
-                                ⚡ Run Analyst Engine
-                            </button>
-                        </>
-                    )}
-                </div>
-            )}
-
-            {/* Analysis Results */}
+            {/* Analysis Results for selected competitor */}
             {analysisData && (
                 <div className="animate-fade-in-up">
                     <div className="section-title" style={{ marginTop: 'var(--space-lg)' }}>

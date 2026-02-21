@@ -1273,3 +1273,96 @@ a:hover {
   min-width: 36px;
   text-align: right;
 }
+
+/* --- Competitor List & Tabs --- */
+.competitor-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.competitor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.competitor-row:hover {
+  border-color: var(--border-glow);
+  background: var(--bg-glass-hover);
+}
+
+.competitor-row.active {
+  border-color: var(--accent-primary);
+  background: rgba(108, 92, 231, 0.06);
+}
+
+.competitor-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.competitor-row-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.competitor-row-url {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.competitor-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.competitor-tabs {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.competitor-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.competitor-tab:hover {
+  border-color: var(--border-glow);
+  background: var(--bg-glass-hover);
+}
+
+.competitor-tab.active {
+  border-color: var(--accent-primary);
+  background: rgba(108, 92, 231, 0.1);
+  color: var(--text-primary);
+}
+
+.competitor-tab-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

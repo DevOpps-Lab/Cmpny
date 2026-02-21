@@ -8,10 +8,40 @@ import CompareView from './pages/CompareView';
 
 function App() {
     const [companyId, setCompanyId] = useState(null);
-    const [competitorId, setCompetitorId] = useState(null);
     const [companyData, setCompanyData] = useState(null);
-    const [analysisData, setAnalysisData] = useState(null);
-    const [planData, setPlanData] = useState(null);
+
+    // Multi-competitor state
+    const [competitors, setCompetitors] = useState([]);         // [{id, name, url, status, page_count}]
+    const [activeCompetitorId, setActiveCompetitorId] = useState(null);
+    const [analysisDataMap, setAnalysisDataMap] = useState({});  // { competitorId: analysisResult }
+    const [planDataMap, setPlanDataMap] = useState({});           // { competitorId: planResult }
+
+    const addCompetitorToList = (comp) => {
+        setCompetitors((prev) => {
+            const exists = prev.find((c) => c.id === comp.id);
+            if (exists) return prev.map((c) => (c.id === comp.id ? { ...c, ...comp } : c));
+            return [...prev, comp];
+        });
+        if (!activeCompetitorId) setActiveCompetitorId(comp.id);
+    };
+
+    const updateCompetitorInList = (comp) => {
+        setCompetitors((prev) =>
+            prev.map((c) => (c.id === comp.id ? { ...c, ...comp } : c))
+        );
+    };
+
+    const setAnalysisData = (competitorId, data) => {
+        setAnalysisDataMap((prev) => ({ ...prev, [competitorId]: data }));
+    };
+
+    const setPlanData = (competitorId, data) => {
+        setPlanDataMap((prev) => ({ ...prev, [competitorId]: data }));
+    };
+
+    const hasCompetitors = competitors.length > 0;
+    const activeAnalysis = analysisDataMap[activeCompetitorId] || null;
+    const activePlan = planDataMap[activeCompetitorId] || null;
 
     return (
         <BrowserRouter>
@@ -25,16 +55,16 @@ function App() {
                         <li><NavLink to="/" end>Onboard</NavLink></li>
                         <li>
                             <NavLink to="/competitor" className={!companyId ? 'disabled' : ''}>
-                                Scout
+                                Scout {hasCompetitors ? `(${competitors.length})` : ''}
                             </NavLink>
                         </li>
                         <li>
-                            <NavLink to="/analysis" className={!competitorId ? 'disabled' : ''}>
+                            <NavLink to="/analysis" className={!hasCompetitors ? 'disabled' : ''}>
                                 Analyze
                             </NavLink>
                         </li>
                         <li>
-                            <NavLink to="/dashboard" className={!competitorId ? 'disabled' : ''}>
+                            <NavLink to="/dashboard" className={!hasCompetitors ? 'disabled' : ''}>
                                 Dashboard
                             </NavLink>
                         </li>
@@ -66,8 +96,11 @@ function App() {
                                 companyId ? (
                                     <CompetitorAdd
                                         companyId={companyId}
-                                        onComplete={(comp) => setCompetitorId(comp.id)}
-                                        competitorId={competitorId}
+                                        competitors={competitors}
+                                        onCompetitorAdded={addCompetitorToList}
+                                        onCompetitorUpdated={updateCompetitorInList}
+                                        onSelectCompetitor={setActiveCompetitorId}
+                                        activeCompetitorId={activeCompetitorId}
                                     />
                                 ) : (
                                     <Navigate to="/" replace />
@@ -77,13 +110,15 @@ function App() {
                         <Route
                             path="/analysis"
                             element={
-                                competitorId ? (
+                                hasCompetitors ? (
                                     <Analysis
-                                        competitorId={competitorId}
-                                        onAnalysisComplete={setAnalysisData}
-                                        onPlanComplete={setPlanData}
-                                        analysisData={analysisData}
-                                        planData={planData}
+                                        competitors={competitors}
+                                        activeCompetitorId={activeCompetitorId}
+                                        onSelectCompetitor={setActiveCompetitorId}
+                                        analysisDataMap={analysisDataMap}
+                                        planDataMap={planDataMap}
+                                        onAnalysisComplete={(id, data) => setAnalysisData(id, data)}
+                                        onPlanComplete={(id, data) => setPlanData(id, data)}
                                     />
                                 ) : (
                                     <Navigate to="/" replace />
@@ -93,12 +128,14 @@ function App() {
                         <Route
                             path="/dashboard"
                             element={
-                                competitorId ? (
+                                hasCompetitors ? (
                                     <Dashboard
-                                        competitorId={competitorId}
+                                        competitors={competitors}
+                                        activeCompetitorId={activeCompetitorId}
+                                        onSelectCompetitor={setActiveCompetitorId}
                                         companyData={companyData}
-                                        analysisData={analysisData}
-                                        planData={planData}
+                                        analysisDataMap={analysisDataMap}
+                                        planDataMap={planDataMap}
                                     />
                                 ) : (
                                     <Navigate to="/" replace />
