@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { sendChatMessage } from '../utils/api';
 
 const SUGGESTED_QUESTIONS = [
+    "Write and send a cold email to test@example.com",
     "Why are customers leaving this competitor?",
     "What's their biggest pricing weakness?",
     "Who should we target first?",
-    "Write me a cold email for this prospect",
 ];
 
 export default function ChatBot({ competitorId, competitorName, analysisData }) {

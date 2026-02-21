@@ -57,9 +57,38 @@ async def chat_with_analyst(context: dict, history: list, user_message: str) -> 
         positioning=context.get("positioning", "Unknown"),
     )
 
+    # Define the Email Sending Tool
+    send_email_tool = {
+        "function_declarations": [
+            {
+                "name": "send_email",
+                "description": "Send a sales or intelligence email to a specific recipient.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "recipient_email": {
+                            "type": "STRING",
+                            "description": "The exact email address to send to."
+                        },
+                        "subject": {
+                            "type": "STRING",
+                            "description": "A catchy, relevant subject line."
+                        },
+                        "body": {
+                            "type": "STRING",
+                            "description": "The body of the email. Keep it plain text but well formatted with newlines. Be extremely persuasive based on the competitor intel."
+                        }
+                    },
+                    "required": ["recipient_email", "subject", "body"]
+                }
+            }
+        ]
+    }
+
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",
-        system_instruction=system_prompt
+        system_instruction=system_prompt,
+        tools=send_email_tool
     )
 
     # Convert history to Gemini format
@@ -72,4 +101,27 @@ async def chat_with_analyst(context: dict, history: list, user_message: str) -> 
 
     chat = model.start_chat(history=gemini_history)
     response = await chat.send_message_async(user_message)
+
+    # Check if the model decided to call the send_email function
+    if response.parts and hasattr(response.parts[0], 'function_call') and response.parts[0].function_call:
+        fc = response.parts[0].function_call
+        if fc.name == "send_email":
+            args = fc.args
+            recipient = args.get("recipient_email")
+            subject = args.get("subject")
+            body = args.get("body")
+            
+            # Use the existing sales router logic to dispatch the email
+            from routers.sales import SalesSendRequest, send_sales_email
+            req = SalesSendRequest(recipient_email=recipient, subject=subject, body=body)
+            # Actually trigger the send
+            try:
+                import sys
+                print(f"\\n\\033[1;33m[AGENT] Chatbot executing send_email_tool...\\033[0m", file=sys.stderr)
+                send_result = await send_sales_email(req)
+                status_msg = send_result.get("message", "Success")
+                return f"📧 **Email Sent!**\\n\\nI've successfully dispatched the email to **{recipient}** with the subject *'{subject}'*.\\n\\n*(System Status: {status_msg})*"
+            except Exception as e:
+                return f"❌ **Email Delivery Failed:** {str(e)}"
+
     return response.text
