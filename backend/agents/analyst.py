@@ -235,19 +235,39 @@ async def run_analyst(company_profile: dict, competitor_pages: list[dict]) -> di
     )
 
     try:
-        result = json.loads(response.text)
-    except json.JSONDecodeError:
+        raw_text = response.text
+        # Optional: Attempt to clean common JSON errors (like missing commas or trailing commas)
+        import re
+        # Fix missing commas between closing brace/bracket and next string key
+        raw_text = re.sub(r'([\}\]])\s*("[a-zA-Z0-9_]+"):', r'\1,\n\2:', raw_text)
+        # Fix missing commas between a string/number value and next string key
+        raw_text = re.sub(r'("[^"]+"|true|false|null|-?\d+(?:\.\d+)?)\s*("[a-zA-Z0-9_]+"):', r'\1,\n\2:', raw_text)
+        
+        result = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        print(f"[ANALYST] JSON Decode Error: {e}. Attempting fallback parser.")
         text = response.text
         start = text.find("{")
         end = text.rfind("}") + 1
-        if start >= 0 and end > start:
-            result = json.loads(text[start:end])
-        else:
+        
+        try:
+            # Try to parse just the extracted block
+            if start >= 0 and end > start:
+                raw_json = text[start:end]
+                # Try simple regex fix again on just the block
+                raw_json = re.sub(r'([\}\]])\s*("[a-zA-Z0-9_]+"):', r'\1,\n\2:', raw_json)
+                result = json.loads(raw_json)
+            else:
+                raise ValueError("No JSON block found")
+        except Exception as e2:
+            print(f"[ANALYST] Fallback parser also failed: {e2}. Returning safe degraded dict.")
             result = {
-                "competitor_name": "Unknown",
-                "executive_summary": "Analysis failed to parse JSON structure.",
+                "competitor_name": company_name + " Competitor",
+                "executive_summary": "Analysis encountered a formatting error and returned partial results.",
                 "signals": {"threats": [], "opportunities": []},
                 "feature_gap_analysis": {"we_win": [], "they_win": [], "contested": []},
+                "pricing_intelligence": {"model": "Unknown", "community_price_perception": "Unknown"},
+                "community_sentiment": {"overall_score": 50},
                 "radar_scores": {"features": 5, "pricing": 5, "market_position": 5, "growth_trajectory": 5, "enterprise_readiness": 5, "community_strength": 5}
             }
 

@@ -80,6 +80,10 @@ export const generateSalesSequence = (competitorId, data) =>
 
 export const sendSalesEmail = (recipientEmail, subject, body) =>
     request('/sales/send', { method: 'POST', body: { recipient_email: recipientEmail, subject, body } });
+
+// --- Chat ---
+export const sendChatMessage = (competitorId, context, history, message) =>
+    request('/chat', { method: 'POST', body: { competitor_id: competitorId, context, history, message } });
 // --- SSE Helper with job_id ---
 export function subscribeToStream(competitorId, onEvent, jobId = null) {
     // Use job_id endpoint if available (more reliable), otherwise fall back to competitor_id

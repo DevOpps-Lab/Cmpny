@@ -5,6 +5,7 @@ import CompetitorAdd from './pages/CompetitorAdd';
 import Analysis from './pages/Analysis';
 import Dashboard from './pages/Dashboard';
 import CompareView from './pages/CompareView';
+import ChatBot from './components/ChatBot';
 
 function App() {
     const [companyId, setCompanyId] = useState(null);
@@ -157,6 +158,15 @@ function App() {
                         />
                     </Routes>
                 </div>
+
+                {/* Global floating AI Analyst Chatbot - ONLY visible if analysis exists */}
+                {activeAnalysis && (
+                    <ChatBot
+                        competitorId={activeCompetitorId}
+                        competitorName={competitors.find(c => c.id === activeCompetitorId)?.name || null}
+                        analysisData={activeAnalysis}
+                    />
+                )}
             </div>
         </BrowserRouter>
     );
