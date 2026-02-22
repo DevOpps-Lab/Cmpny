@@ -10,7 +10,7 @@ import {
     Legend,
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import { setMonitor, getMonitor, getAlerts, generateSalesSequence, sendSalesEmail, triggerVoiceCall } from '../utils/api';
+import { generateSalesSequence, sendSalesEmail, triggerVoiceCall } from '../utils/api';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
@@ -38,52 +38,7 @@ export default function Dashboard({
     const roadmap = planData?.roadmap || [];
     const navigate = useNavigate();
 
-    // --- Monitoring state ---
-    const [monitorActive, setMonitorActive] = useState(false);
-    const [monitorSchedule, setMonitorSchedule] = useState('weekly');
-    const [monitorSaving, setMonitorSaving] = useState(false);
-    const [monitorSaved, setMonitorSaved] = useState(false);
-    const [monitorError, setMonitorError] = useState('');
-    const [alerts, setAlerts] = useState([]);
-    const [monitorLoaded, setMonitorLoaded] = useState(false);
-    const [lastRun, setLastRun] = useState(null);
-    const [nextRun, setNextRun] = useState(null);
-
-    // Load monitor settings when active competitor changes
-    useEffect(() => {
-        if (!competitorId) return;
-        setMonitorLoaded(false);
-        setAlerts([]);
-
-        getMonitor(competitorId)
-            .then((job) => {
-                setMonitorActive(job.is_active);
-                setMonitorSchedule(job.schedule);
-                setLastRun(job.last_run);
-                setNextRun(job.next_run);
-                setMonitorLoaded(true);
-            })
-            .catch(() => setMonitorLoaded(true));
-
-        getAlerts(competitorId).then(setAlerts).catch(() => { });
-    }, [competitorId]);
-
-    const handleSaveMonitor = async () => {
-        setMonitorSaving(true);
-        setMonitorError('');
-        setMonitorSaved(false);
-        try {
-            const result = await setMonitor(competitorId, monitorSchedule, monitorActive);
-            setLastRun(result.last_run);
-            setNextRun(result.next_run);
-            setMonitorSaved(true);
-            setTimeout(() => setMonitorSaved(false), 3000);
-        } catch (err) {
-            setMonitorError(err.message || 'Failed to save monitoring settings');
-        } finally {
-            setMonitorSaving(false);
-        }
-    };
+    // Monitoring and Alert states removed.
 
     // --- Sales Sequence state ---
     const [salesSequence, setSalesSequence] = useState(null);
@@ -515,69 +470,6 @@ export default function Dashboard({
                 )}
             </div>
 
-            {/* ========== Continuous Monitoring Section ========== */}
-            <div className="glass-card--static" style={{ marginBottom: 'var(--space-xl)' }}>
-                <div className="section-title">📡 Continuous Monitoring</div>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: 'var(--space-lg)' }}>
-                    Enable automatic re-crawling and analysis. Compy will detect changes in competitor strategy and alert you.
-                </p>
-                <div className="monitor-controls">
-                    <div className="monitor-control-row">
-                        <span className="monitor-label">Monitoring</span>
-                        <label className="monitor-toggle" id="monitor-toggle">
-                            <input type="checkbox" checked={monitorActive} onChange={(e) => setMonitorActive(e.target.checked)} />
-                            <span className="monitor-toggle-slider" />
-                            <span className="monitor-toggle-text">{monitorActive ? 'Active' : 'Inactive'}</span>
-                        </label>
-                    </div>
-                    <div className="monitor-control-row">
-                        <span className="monitor-label">Schedule</span>
-                        <select className="monitor-select" value={monitorSchedule} onChange={(e) => setMonitorSchedule(e.target.value)} id="monitor-schedule">
-                            <option value="daily">🔄 Daily</option>
-                            <option value="weekly">📅 Weekly</option>
-                        </select>
-                    </div>
-                    {(lastRun || nextRun) && (
-                        <div className="monitor-control-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 'var(--space-xs)' }}>
-                            {lastRun && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Last scan: {new Date(lastRun).toLocaleString()}</span>}
-                            {nextRun && monitorActive && <span style={{ fontSize: '0.8rem', color: 'var(--accent-secondary)' }}>Next scan: {new Date(nextRun).toLocaleString()}</span>}
-                        </div>
-                    )}
-                    <div className="monitor-control-row">
-                        <button className="btn btn-primary" onClick={handleSaveMonitor} disabled={monitorSaving} id="save-monitor-btn">
-                            {monitorSaving ? (<><span className="loading-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Saving...</>) : monitorSaved ? '✅ Saved!' : '💾 Save Settings'}
-                        </button>
-                    </div>
-                    {monitorError && <p style={{ color: 'var(--accent-danger)', fontSize: '0.85rem', marginTop: 'var(--space-sm)' }}>❌ {monitorError}</p>}
-                </div>
-            </div>
-
-            {/* ========== Change Alerts Timeline ========== */}
-            <div className="glass-card--static">
-                <div className="section-title">🔔 Recent Changes</div>
-                {alerts.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: 'var(--space-xl)', color: 'var(--text-muted)' }}>
-                        <div style={{ fontSize: '2rem', marginBottom: 'var(--space-sm)' }}>📭</div>
-                        <p>No change alerts yet. Enable monitoring above to start tracking competitor changes.</p>
-                    </div>
-                ) : (
-                    <div className="alert-timeline">
-                        {alerts.map((alert) => (
-                            <div className="alert-card" key={alert.id}>
-                                <div className="alert-card-header">
-                                    <span className="alert-date">📅 {new Date(alert.detected_at).toLocaleDateString()} at {new Date(alert.detected_at).toLocaleTimeString()}</span>
-                                </div>
-                                <p className="alert-summary">{alert.summary}</p>
-                                <div className="alert-badges">
-                                    {(alert.new_signals || []).length > 0 && <span className="badge badge-opportunity">+{alert.new_signals.length} new</span>}
-                                    {(alert.disappeared_signals || []).length > 0 && <span className="badge badge-threat">−{alert.disappeared_signals.length} gone</span>}
-                                    {(alert.severity_changes || []).length > 0 && <span className="badge badge-moderate">↕ {alert.severity_changes.length} changed</span>}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
         </div>
     );
 }

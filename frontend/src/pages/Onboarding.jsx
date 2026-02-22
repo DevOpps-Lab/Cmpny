@@ -160,9 +160,9 @@ export default function Onboarding({ onComplete, companyData }) {
                         <div className="glass-card--static profile-section">
                             <h3>💰 Pricing</h3>
                             {companyData.pricing?.model && (
-                                <div className="badge badge-opportunity" style={{ marginBottom: 'var(--space-sm)' }}>
+                                <p style={{ marginBottom: 'var(--space-sm)', color: 'var(--accent-opportunity)', fontSize: '0.9rem', lineHeight: 1.5 }}>
                                     {companyData.pricing.model}
-                                </div>
+                                </p>
                             )}
                             {(companyData.pricing?.tiers || []).map((tier, i) => (
                                 <div key={i} style={{ marginBottom: 'var(--space-xs)', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
