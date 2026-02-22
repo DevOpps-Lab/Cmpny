@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Chart as ChartJS,
@@ -10,7 +10,9 @@ import {
     Legend,
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import { generateSalesSequence, sendSalesEmail, triggerVoiceCall } from '../utils/api';
+import { generateSalesSequence, sendSalesEmail } from '../utils/api';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
@@ -41,6 +43,8 @@ export default function Dashboard({
     // Monitoring and Alert states removed.
 
     // --- Sales Sequence state ---
+    const reportRef = useRef(null);
+    const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
     const [salesSequence, setSalesSequence] = useState(null);
     const [generatingSales, setGeneratingSales] = useState(false);
     const [salesError, setSalesError] = useState('');
@@ -88,23 +92,48 @@ export default function Dashboard({
         }
     };
 
-    // --- Voice Call state ---
-    const [callingVoice, setCallingVoice] = useState(false);
-    const [voiceSuccess, setVoiceSuccess] = useState('');
-    const [voiceError, setVoiceError] = useState('');
-
-    const handleVoiceCall = async () => {
-        setCallingVoice(true);
-        setVoiceError('');
-        setVoiceSuccess('');
+    // --- Download Report ---
+    const handleDownloadReport = async () => {
+        if (!reportRef.current) return;
+        setIsDownloadingPDF(true);
         try {
-            const result = await triggerVoiceCall(competitorId);
-            setVoiceSuccess(result.message || 'Phone is ringing...');
-            setTimeout(() => setVoiceSuccess(''), 8000);
-        } catch (err) {
-            setVoiceError(err.message || 'Call failed.');
+            // Give layout a tick to settle before capturing
+            await new Promise(resolve => setTimeout(resolve, 100));
+            const canvas = await html2canvas(reportRef.current, {
+                scale: 1.5, // Better resolution without blowing up file size
+                useCORS: true,
+                backgroundColor: '#0f0f13' // explicitly setting the dark background
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.95);
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            const imgParams = pdf.getImageProperties(imgData);
+            const imgWidth = pdfWidth;
+            const imgHeight = (imgParams.height * pdfWidth) / imgParams.width;
+
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            // Add first page
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pdfHeight;
+
+            // Add extra pages if needed
+            while (heightLeft >= 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
+
+            pdf.save(`compy_intelligence_${analysisData?.competitor_name?.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'report'}.pdf`);
+        } catch (error) {
+            console.error('PDF Generation failed', error);
         } finally {
-            setCallingVoice(false);
+            setIsDownloadingPDF(false);
         }
     };
 
@@ -192,7 +221,7 @@ export default function Dashboard({
     const criticalThreats = threats.filter(t => t.severity_score >= 80).length;
 
     return (
-        <div className="animate-fade-in-up">
+        <div className="animate-fade-in-up" ref={reportRef} style={{ padding: '20px', backgroundColor: '#0f0f13', borderRadius: '16px' }}>
             <h1 className="page-title">Strategic Dashboard</h1>
 
             {/* Competitor Tabs */}
@@ -214,18 +243,16 @@ export default function Dashboard({
                 <p className="page-subtitle" style={{ margin: 0 }}>
                     {companyData?.name || 'You'} vs {analysisData?.competitor_name || 'Competitor'} — Complete intelligence overview
                 </p>
-                <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
-                    {voiceError && <span style={{ color: 'var(--accent-danger)', fontSize: '0.85rem' }}>❌ {voiceError}</span>}
-                    {voiceSuccess && <span style={{ color: 'var(--accent-success)', fontSize: '0.85rem', animation: 'pulse 1s infinite' }}>📞 {voiceSuccess}</span>}
+                <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }} data-html2canvas-ignore>
                     <button
                         className="btn btn-primary"
-                        onClick={handleVoiceCall}
-                        disabled={callingVoice}
-                        style={{ backgroundColor: '#2d3436', borderColor: '#636e72', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', position: 'relative', overflow: 'hidden' }}
+                        onClick={handleDownloadReport}
+                        disabled={isDownloadingPDF}
+                        style={{ backgroundColor: 'var(--accent-secondary)', borderColor: 'var(--accent-secondary)' }}
                     >
-                        {callingVoice ? (
-                            <><span className="loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Dialing...</>
-                        ) : '📞 Brief Me via Phone'}
+                        {isDownloadingPDF ? (
+                            <><span className="loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Generating PDF...</>
+                        ) : '📥 Download PDF Report'}
                     </button>
                 </div>
             </div>
