@@ -10,7 +10,7 @@ import {
     Legend,
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import { setMonitor, getMonitor, getAlerts, generateSalesSequence, sendSalesEmail } from '../utils/api';
+import { setMonitor, getMonitor, getAlerts, generateSalesSequence, sendSalesEmail, triggerVoiceCall } from '../utils/api';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
@@ -133,6 +133,26 @@ export default function Dashboard({
         }
     };
 
+    // --- Voice Call state ---
+    const [callingVoice, setCallingVoice] = useState(false);
+    const [voiceSuccess, setVoiceSuccess] = useState('');
+    const [voiceError, setVoiceError] = useState('');
+
+    const handleVoiceCall = async () => {
+        setCallingVoice(true);
+        setVoiceError('');
+        setVoiceSuccess('');
+        try {
+            const result = await triggerVoiceCall(competitorId);
+            setVoiceSuccess(result.message || 'Phone is ringing...');
+            setTimeout(() => setVoiceSuccess(''), 8000);
+        } catch (err) {
+            setVoiceError(err.message || 'Call failed.');
+        } finally {
+            setCallingVoice(false);
+        }
+    };
+
     // Battle Card data based on new schema
     const battleRows = useMemo(() => {
         const rows = [];
@@ -235,9 +255,25 @@ export default function Dashboard({
                 </div>
             )}
 
-            <p className="page-subtitle">
-                {companyData?.name || 'You'} vs {analysisData?.competitor_name || 'Competitor'} — Complete intelligence overview
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
+                <p className="page-subtitle" style={{ margin: 0 }}>
+                    {companyData?.name || 'You'} vs {analysisData?.competitor_name || 'Competitor'} — Complete intelligence overview
+                </p>
+                <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
+                    {voiceError && <span style={{ color: 'var(--accent-danger)', fontSize: '0.85rem' }}>❌ {voiceError}</span>}
+                    {voiceSuccess && <span style={{ color: 'var(--accent-success)', fontSize: '0.85rem', animation: 'pulse 1s infinite' }}>📞 {voiceSuccess}</span>}
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleVoiceCall}
+                        disabled={callingVoice}
+                        style={{ backgroundColor: '#2d3436', borderColor: '#636e72', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', position: 'relative', overflow: 'hidden' }}
+                    >
+                        {callingVoice ? (
+                            <><span className="loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Dialing...</>
+                        ) : '📞 Brief Me via Phone'}
+                    </button>
+                </div>
+            </div>
 
             {/* Stats Row */}
             <div className="grid-4 stagger-children" style={{ marginBottom: 'var(--space-xl)' }}>

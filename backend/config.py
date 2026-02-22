@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     FROM_EMAIL: str = os.getenv("FROM_EMAIL", SMTP_USERNAME)
 
+    # Twilio Voice Call Settings
+    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_PHONE_NUMBER: str = os.getenv("TWILIO_PHONE_NUMBER", "")
+    DESTINATION_PHONE_NUMBER: str = os.getenv("DESTINATION_PHONE_NUMBER", "")
+
     class Config:
         env_file = ".env"
 

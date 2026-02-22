@@ -45,6 +45,7 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     try:
         reply = await chat_with_analyst(
+            competitor_id=req.competitor_id,
             context=req.context.dict(),
             history=[{"role": m.role, "content": m.content} for m in req.history],
             user_message=req.message,

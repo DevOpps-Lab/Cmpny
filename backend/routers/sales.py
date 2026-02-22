@@ -73,7 +73,13 @@ async def send_sales_email(req: SalesSendRequest):
     # 2. Try sending real email if SMTP credentials exist
     try:
         if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
-            msg = MIMEText(req.body)
+            # Ensure it is parsed as HTML in Gmail
+            html_body = req.body
+            # Fallback just in case Gemini forgot to use HTML tags
+            if "<p>" not in html_body and "<br>" not in html_body:
+                html_body = html_body.replace('\n', '<br>')
+                
+            msg = MIMEText(html_body, 'html')
             msg['Subject'] = req.subject
             msg['From'] = settings.FROM_EMAIL
             msg['To'] = req.recipient_email

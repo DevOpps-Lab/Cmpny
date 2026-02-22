@@ -81,6 +81,10 @@ export const generateSalesSequence = (competitorId, data) =>
 export const sendSalesEmail = (recipientEmail, subject, body) =>
     request('/sales/send', { method: 'POST', body: { recipient_email: recipientEmail, subject, body } });
 
+// --- Voice ---
+export const triggerVoiceCall = (competitorId) =>
+    request('/voice/call', { method: 'POST', body: { competitor_id: competitorId } });
+
 // --- Chat ---
 export const sendChatMessage = (competitorId, context, history, message) =>
     request('/chat', { method: 'POST', body: { competitor_id: competitorId, context, history, message } });

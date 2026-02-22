@@ -41,7 +41,7 @@ Top Complaints: {top_complaints}
 - Keep responses short (max 150 words) unless the user explicitly asks for something longer.
 """
 
-async def chat_with_analyst(context: dict, history: list, user_message: str) -> str:
+async def chat_with_analyst(competitor_id: int, context: dict, history: list, user_message: str) -> str:
     system_prompt = CHAT_SYSTEM_PROMPT.format(
         competitor_name=context.get("competitor_name", "Unknown"),
         competitor_url=context.get("competitor_url", "Unknown"),
@@ -76,7 +76,7 @@ async def chat_with_analyst(context: dict, history: list, user_message: str) -> 
                         },
                         "body": {
                             "type": "STRING",
-                            "description": "The body of the email. Keep it plain text but well formatted with newlines. Be extremely persuasive based on the competitor intel."
+                            "description": "The body of the email. MUST be formatted in crisp, professional HTML. Use <p>, <b>, <i>, <ul>, <li>, and <br> tags to make it highly readable and look like a premium corporate email in Gmail. Do NOT wrap the output in markdown blockquotes or ```html tags."
                         }
                     },
                     "required": ["recipient_email", "subject", "body"]
@@ -85,10 +85,30 @@ async def chat_with_analyst(context: dict, history: list, user_message: str) -> 
         ]
     }
 
+    # Define the Voice Calling Tool
+    send_voice_tool = {
+        "function_declarations": [
+            {
+                "name": "send_voice_briefing",
+                "description": "Trigger an executive briefing phone call to the provided phone number.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "phone_number": {
+                            "type": "STRING",
+                            "description": "The phone number to call. MUST be in E.164 format. If the user provides a 10-digit Indian number, you MUST prepend '+91' to it (e.g., '+917539962693')."
+                        }
+                    },
+                    "required": ["phone_number"]
+                }
+            }
+        ]
+    }
+
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",
         system_instruction=system_prompt,
-        tools=send_email_tool
+        tools=[send_email_tool["function_declarations"][0], send_voice_tool["function_declarations"][0]]
     )
 
     # Convert history to Gemini format
@@ -111,17 +131,70 @@ async def chat_with_analyst(context: dict, history: list, user_message: str) -> 
             subject = args.get("subject")
             body = args.get("body")
             
-            # Use the existing sales router logic to dispatch the email
             from routers.sales import SalesSendRequest, send_sales_email
             req = SalesSendRequest(recipient_email=recipient, subject=subject, body=body)
-            # Actually trigger the send
             try:
                 import sys
-                print(f"\\n\\033[1;33m[AGENT] Chatbot executing send_email_tool...\\033[0m", file=sys.stderr)
+                print(f"\\n\\033[1;33m[AGENT] Chatbot executing send_email...\\033[0m", file=sys.stderr)
                 send_result = await send_sales_email(req)
                 status_msg = send_result.get("message", "Success")
                 return f"📧 **Email Sent!**\\n\\nI've successfully dispatched the email to **{recipient}** with the subject *'{subject}'*.\\n\\n*(System Status: {status_msg})*"
             except Exception as e:
                 return f"❌ **Email Delivery Failed:** {str(e)}"
+
+        elif fc.name == "send_voice_briefing":
+            args = fc.args
+            phone_number = args.get("phone_number")
+            
+            try:
+                import sys
+                print(f"\\n\\033[1;33m[AGENT] Chatbot executing send_voice_briefing to {phone_number}...\\033[0m", file=sys.stderr)
+                
+                from database import async_session
+                from models import Competitor, Signal
+                from sqlalchemy import select
+                from config import settings
+                from twilio.rest import Client
+                
+                async with async_session() as db:
+                    # 1. Fetch Competitor and Signals
+                    result = await db.execute(select(Competitor).where(Competitor.id == competitor_id))
+                    competitor = result.scalar_one_or_none()
+                    
+                    if not competitor:
+                        return "❌ **Voice Call Failed:** Could not find the competitor in the database."
+                        
+                    signals_result = await db.execute(select(Signal).where(Signal.competitor_id == competitor_id))
+                    signals = signals_result.scalars().all()
+                    
+                    if not signals:
+                        return "❌ **Voice Call Failed:** No intelligence signals found to brief you on."
+                        
+                    intelligence_summary = "\\n".join([f"- {s.signal_type.upper()}: {s.title} ({s.severity})" for s in signals])
+                    
+                    # 2. Generate Script
+                    prompt = f"You are the Compy AI Analyst calling an executive on the phone to give a quick intel briefing.\\nThe competitor is: {competitor.name}.\\n\\nHere is the raw intelligence data:\\n{intelligence_summary[:4000]}\\n\\nWrite a spoken script for a phone call. \\nRules:\\n- Start with 'Hello! This is Compy AI with your executive briefing on {competitor.name}.'\\n- Keep it under 60 seconds when spoken.\\n- Highlight their biggest weakness and their biggest strength.\\n- Be highly engaging and conversational. Do not use bullet points or markdown, just natural sentences.\\n- End with 'Thank you, and happy selling.'"
+                    
+                    script_model = genai.GenerativeModel("gemini-2.5-flash")
+                    script_resp = await script_model.generate_content_async(prompt)
+                    script = script_resp.text.replace("\\n", " ").strip()
+                    
+                    # 3. Call via Twilio
+                    client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+                    safe_script = script.replace("<", "").replace(">", "").replace("&", "and")
+                    twiml = f'<Response><Say voice="alice">{safe_script}</Say></Response>'
+                    
+                    call = client.calls.create(
+                        twiml=twiml,
+                        to=phone_number,
+                        from_=settings.TWILIO_PHONE_NUMBER
+                    )
+                
+                return f"📞 **Outbound Call Initiated!**\n\nI am dialing **{phone_number}** right now to deliver the executive briefing.\n\n*(System Status: Success, Call SID: {call.sid})*"
+            except Exception as e:
+                import traceback
+                print(f"VOICE CALL ERROR: {e}")
+                traceback.print_exc()
+                return f"❌ **Voice Call Failed:** {str(e)}"
 
     return response.text
